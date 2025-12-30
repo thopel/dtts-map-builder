@@ -1,8 +1,37 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "Hobo";
+  src: url("./assets/hobo.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+}
+
+.font-hobo {
+  font-family: "Hobo", sans-serif;
+}
+
 html,
 body,
 #root {
   height: 100%;
   margin: 0;
+}
+
+input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
 }

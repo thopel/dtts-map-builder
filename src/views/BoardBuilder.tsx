@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import Palette from "../components/Palette";
 import Grid from "../components/Grid";
 import Options from "../components/Options";
+import PrintModal from "../components/PrintModal";
 
 export type TileType = "road" | "school" | "safe_place";
 
@@ -532,6 +533,9 @@ export default function BoardBuilder() {
   const gridAreaRef = useRef<HTMLDivElement | null>(null);
   const [cellSize, setCellSize] = useState<number>(64);
 
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [boardName, setBoardName] = useState("");
+
   useLayoutEffect(() => {
     const el = gridAreaRef.current;
     if (!el) return;
@@ -922,6 +926,10 @@ export default function BoardBuilder() {
     window.print();
   }
 
+  function onShare() {
+    console.log("TODO: share");
+  }
+
   return (
     <div className="h-screen w-screen bg-neutral-950 text-neutral-100">
       <style>{`
@@ -932,23 +940,30 @@ export default function BoardBuilder() {
       body * { visibility: hidden !important; }
       .bb-print-target, .bb-print-target * { visibility: visible !important; }
       .bb-print-target { position: fixed !important; inset: 0 !important; padding: 0 !important; margin: 0 !important; }
-      .bb-print-cell { width: 2.7cm !important; height: 2.7cm !important; transform: translate(155px, 117px) !important; }
-      .bb-print-grid { grid-template-columns: repeat(var(--bb-cols), 2.7cm) !important; grid-template-rows: repeat(var(--bb-rows), 2.7cm) !important; gap: 0 !important; }
+      .bb-print-cell { width: 3cm !important; height: 3cm !important; transform: translate(145px, 88px) !important; }
+      .bb-print-grid { grid-template-columns: repeat(var(--bb-cols), 3cm) !important; grid-template-rows: repeat(var(--bb-rows), 3cm) !important; gap: 0 !important; }
+      .bb-print-input { transform: rotate(90deg) !important; position: absolute !important; left: 48px !important; top: -12px !important; transform-origin: left center !important; }
+      .bb-print-bottom-line { display: block !important; position: absolute !important; top: 270px !important; transform: rotate(90deg) !important; right: -235px !important; font-size: 9pt !important; }  
     }
     `}</style>
 
       <div className="flex h-full w-full flex-col p-4 bb-no-print">
         <header className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold">Constructeur de plateau de jeu pour Don't Talk To Strangers</h1>
-            <p className="text-sm text-neutral-300">Déplace des tuiles vers la grille pour créer ton plateau personnalisé.</p>
+            <h1 className="text-2xl font-semibold">Editeur de plateau de jeu pour Don't Talk To Strangers</h1>
+            <p className="text-sm text-neutral-300">Déplace des tuiles vers la grille pour créer ton plateau de jeu personnalisé.</p>
           </div>
 
           <div className="flex flex-wrap gap-2">
             {!isGameMode && (
-              <button className="rounded-xl bg-neutral-800 px-3 py-2 text-sm hover:bg-neutral-700" onClick={onPrint}>
-                Imprimer
-              </button>
+              <>
+                <button className="rounded-xl bg-neutral-800 px-3 py-2 text-sm hover:bg-neutral-700" onClick={() => navigate("/community")}>
+                  Créations de la communauté
+                </button>
+                <button className="rounded-xl bg-neutral-800 px-3 py-2 text-sm hover:bg-neutral-700" onClick={() => setIsPrintModalOpen(true)}>
+                  Imprimer
+                </button>
+              </>
             )}
 
             <button className="rounded-xl bg-neutral-800 px-3 py-2 text-sm hover:bg-neutral-700" onClick={() => setIsGameMode((v) => !v)}>
@@ -974,6 +989,8 @@ export default function BoardBuilder() {
               rows={rows}
               cols={cols}
               grid={grid}
+              boardName={boardName}
+              onBoardNameChange={setBoardName}
               selectedCell={selectedCell}
               setSelectedCell={setSelectedCell}
               gridAreaRef={gridAreaRef}
@@ -1015,6 +1032,18 @@ export default function BoardBuilder() {
           </aside>
         </div>
       </div>
+      {isPrintModalOpen ? (
+        <PrintModal
+          isOpen={isPrintModalOpen}
+          onClose={() => setIsPrintModalOpen(false)}
+          boardName={boardName}
+          onPrint={() => window.print()}
+          onShare={() => {
+            onShare();
+            setIsPrintModalOpen(false);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

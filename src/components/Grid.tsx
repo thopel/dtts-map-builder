@@ -6,6 +6,9 @@ type Props = {
   cols: number;
   grid: Record<string, Cell>;
 
+  boardName: string;
+  onBoardNameChange: (name: string) => void;
+
   selectedCell: string | null;
   setSelectedCell: (v: string | null) => void;
 
@@ -31,6 +34,8 @@ export default function Grid({
   cols,
   grid,
   selectedCell,
+  boardName,
+  onBoardNameChange,
   setSelectedCell,
   gridAreaRef,
   computeCellZIndex,
@@ -73,6 +78,10 @@ export default function Grid({
 
     return { cellPx: cell, gridW: gw, gridH: gh };
   }, [area.w, area.h, rows, cols]);
+
+  const onBoardNameChanged = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onBoardNameChange(e.target.value);
+  };
 
   return (
     <main className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-neutral-800 bg-[#ff2020] p-3">
@@ -159,6 +168,16 @@ export default function Grid({
           </div>
         </div>
       </div>
+      <input
+        id="boardName"
+        value={boardName}
+        onChange={onBoardNameChanged}
+        type="text"
+        className="bg-[#ffc223] border-3 border-black p-1 text-black w-80 mt-4 font-hobo text-l bb-print-input"
+      />
+      <span className="bb-print-bottom-line text-black hidden">
+        Carte créée sur dtts-builder.thomaspelfrene.com | Carte de jeu non officielle | thomaspelfrene.com
+      </span>
     </main>
   );
 }
