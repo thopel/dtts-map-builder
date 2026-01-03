@@ -163,19 +163,38 @@ export default function Options({
           )}
         </div>
       </div>
-      <div className="p-3 flex flex-col">
-        <span className="text-sm">Contenu non officiel</span>
-        <span className="text-sm">
-          Créé par{" "}
-          <a href="https://thomaspelfrene.com" target="_blank" rel="noopener noreferrer">
-            thomaspelfrene.com
-          </a>
-          {" | "} v1.0.0
-        </span>
-        <span className="text-sm">
-          Questions ou suggestions : <u>tpelfrene@gmail.com</u>
-        </span>
-      </div>
+      <footer className="w-full border-t border-neutral-800/70 bg-neutral-950/60 backdrop-blur">
+        <div className="mx-auto max-w-5xl px-4 py-4 text-sm text-neutral-200">
+          <div className="flex flex-col gap-1.5">
+            <div className="flex justify-between">
+              <span className="font-medium text-neutral-100">Contenu non officiel</span>
+              <span>v1.0.0</span>
+            </div>
+
+            <span className="text-neutral-300">
+              Créé par{" "}
+              <a
+                href="https://thomaspelfrene.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-neutral-100 underline underline-offset-4 decoration-neutral-500 hover:decoration-neutral-200"
+              >
+                thomaspelfrene.com
+              </a>
+            </span>
+
+            <span className="text-neutral-300">
+              Questions ou suggestions :{" "}
+              <a
+                href="mailto:tpelfrene@gmail.com"
+                className="text-neutral-100 underline underline-offset-4 decoration-neutral-500 hover:decoration-neutral-200"
+              >
+                tpelfrene@gmail.com
+              </a>
+            </span>
+          </div>
+        </div>
+      </footer>
     </aside>
   );
 }

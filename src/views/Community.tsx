@@ -347,7 +347,7 @@ export default function Community() {
       </div>
 
       {/* Footer */}
-      <footer className="fixed bottom-0 left-0 right-0 z-20 border-t border-white/10 bg-black/80 backdrop-blur">
+      <footer className="border-t border-white/10 bg-black/80 backdrop-blur">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3 text-xs text-white/60">
           <span>Contenu non officiel — Créations partagées par la communauté</span>
           <span>DTTS Builder — v1.0.0</span>

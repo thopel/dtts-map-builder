@@ -173,7 +173,7 @@ export default function Grid({
         value={boardName}
         onChange={onBoardNameChanged}
         type="text"
-        className="bg-[#ffc223] border-3 border-black p-1 text-black w-80 mt-4 font-hobo text-l bb-print-input"
+        className="bg-[#ffc223] border-3 border-black p-1 text-black w-80 mt-4 font-hobo text-xl bb-print-input"
       />
       <span className="bb-print-bottom-line text-black hidden">
         Carte créée sur dtts-builder.thomaspelfrene.com | Carte de jeu non officielle | thomaspelfrene.com

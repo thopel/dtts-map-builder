@@ -1,10 +1,14 @@
+// src/views/BoardBuilder.tsx
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { jsPDF } from "jspdf";
 
 import Palette from "../components/Palette";
 import Grid from "../components/Grid";
 import Options from "../components/Options";
 import PrintModal from "../components/PrintModal";
+
+import hoboTtfUrl from "../assets/Hobo.ttf?url";
 
 export type TileType = "road" | "school" | "safe_place";
 
@@ -167,17 +171,14 @@ function nextRotation(curr: TileRotation, allowFull: boolean): TileRotation {
 }
 
 function mapDisplayToSource(dx: number, dy: number, baseW: number, baseH: number, rot: TileRotation) {
-  // retourne (sx, sy) dans l’image non-rotatée
   switch (rot) {
     case 0:
       return { sx: dx, sy: dy };
     case 90:
-      // CW
       return { sx: dy, sy: baseH - 1 - dx };
     case 180:
       return { sx: baseW - 1 - dx, sy: baseH - 1 - dy };
     case 270:
-      // CCW
       return { sx: baseW - 1 - dy, sy: dx };
   }
 }
@@ -265,10 +266,6 @@ function normalizeOptions(it: PlacedItem): PlacedItem {
   return { ...it, baseSize: { w: baseW, h: baseH }, size: nextSize, options: merged };
 }
 
-/**
- * Rotation CW 90° des segments, en prenant les dimensions COURANTES (w,h).
- * Retourne aussi les segments avec les nouvelles longueurs (w' = h, h' = w).
- */
 function rotateSegmentsCW90(opts: PlacedOptions, w: number, h: number): PlacedOptions {
   const top = (opts.topSegments ?? Array.from({ length: w }, () => false)) as boolean[];
   const bottom = (opts.bottomSegments ?? Array.from({ length: w }, () => false)) as boolean[];
@@ -305,7 +302,7 @@ function rotateSegmentsBy(opts: PlacedOptions, w: number, h: number, stepsCW: nu
 
 function rotationDeltaCW(prev: TileRotation, next: TileRotation) {
   const d = (next - prev + 360) % 360;
-  return d / 90; // 0..3
+  return d / 90;
 }
 
 function makeDragPreviewEl(it: PlacedItem, cellPx: number, getTileUrl: (type: string) => string, getRoadOverlay: (it: PlacedItem) => string | null) {
@@ -412,6 +409,290 @@ function startDragMoveFromCell(
   requestAnimationFrame(() => preview.remove());
 }
 
+async function loadTtfAsBase64(url: string): Promise<string> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Font fetch failed: ${res.status}`);
+  const buf = await res.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+async function generateBoardPdf(args: {
+  rows: number;
+  cols: number;
+  grid: Record<string, Cell>;
+  boardName: string;
+  getTileUrl: (type: string) => string;
+  getRoadOverlay: (it: PlacedItem) => string | null;
+}) {
+  const { rows, cols, grid, boardName, getTileUrl, getRoadOverlay } = args;
+
+  const pdf = new jsPDF({
+    orientation: "landscape",
+    unit: "cm",
+    format: "a4",
+    compress: true,
+  });
+
+  const PAGE_W = 29.7;
+  const PAGE_H = 21.0;
+
+  const FRAME_PAD = 0.6;
+  const FRAME_RADIUS = 0.35;
+  const HEADER_H = 1.1;
+  const FOOTER_H = 3.0;
+  const LEFT_GUTTER = 1.0;
+
+  const CELL_CM = 3;
+  const CELL_PX = 360;
+
+  const C_BG = { r: 255, g: 32, b: 32 };
+  const C_CELL = { r: 150, g: 18, b: 18 };
+  const C_GRID = { r: 120, g: 120, b: 120 };
+  const C_TEXT = { r: 30, g: 30, b: 30 };
+  const C_NAME = { r: 245, g: 186, b: 18 };
+  const C_BLACK = { r: 0, g: 0, b: 0 };
+
+  const safePdfName = (s: string) => {
+    const v = (s || "plateau").trim();
+    const cleaned = v.replace(/[\\/:*?"<>|]+/g, "-");
+    return cleaned.length ? cleaned : `plateau-ddts#${Math.floor(Math.random() * 10000)}`;
+  };
+
+  // Font
+  try {
+    const base64 = await loadTtfAsBase64(hoboTtfUrl);
+    pdf.addFileToVFS("hobo.ttf", base64);
+    pdf.addFont("hobo.ttf", "hobo", "normal");
+  } catch {
+    // fallback silencieux
+  }
+
+  const loadImage = (src: string): Promise<HTMLImageElement> =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+
+  const buildFullTileCanvas = (img: HTMLImageElement, baseW: number, baseH: number, cellPx: number) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = baseW * cellPx;
+    canvas.height = baseH * cellPx;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return canvas;
+    ctx.imageSmoothingEnabled = true;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return canvas;
+  };
+
+  const cropCellFromFullTile = (full: HTMLCanvasElement, sx: number, sy: number, cellPx: number) => {
+    const out = document.createElement("canvas");
+    out.width = cellPx;
+    out.height = cellPx;
+    const ctx = out.getContext("2d");
+    if (!ctx) return out;
+    ctx.imageSmoothingEnabled = true;
+    ctx.clearRect(0, 0, cellPx, cellPx);
+    ctx.drawImage(full, sx * cellPx, sy * cellPx, cellPx, cellPx, 0, 0, cellPx, cellPx);
+    return out;
+  };
+
+  const frameX = FRAME_PAD;
+  const frameY = FRAME_PAD;
+  const frameW = PAGE_W - 2 * FRAME_PAD;
+  const frameH = PAGE_H - 2 * FRAME_PAD;
+
+  pdf.setFillColor(255, 255, 255);
+  pdf.rect(0, 0, PAGE_W, PAGE_H, "F");
+
+  pdf.setFillColor(0, 0, 0);
+  pdf.setGState(new (pdf as any).GState({ opacity: 0.12 }));
+  pdf.roundedRect(frameX + 0.12, frameY + 0.12, frameW, frameH, FRAME_RADIUS, FRAME_RADIUS, "F");
+  pdf.setGState(new (pdf as any).GState({ opacity: 0.06 }));
+  pdf.roundedRect(frameX + 0.22, frameY + 0.22, frameW, frameH, FRAME_RADIUS, FRAME_RADIUS, "F");
+  pdf.setGState(new (pdf as any).GState({ opacity: 1 }));
+
+  pdf.setFillColor(C_BG.r, C_BG.g, C_BG.b);
+  pdf.roundedRect(frameX, frameY, frameW, frameH, FRAME_RADIUS, FRAME_RADIUS, "F");
+
+  const title = "Carte créée sur dtts-builder.thomaspelfrene.com | Carte de jeu non-officielle | thomaspelfrene.com";
+
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(8);
+  pdf.setTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b);
+
+  const headerTextX = frameX + LEFT_GUTTER + 1.4;
+  const headerTextY = frameY + 0.7;
+  pdf.text(title, headerTextX, headerTextY);
+
+  const gridWcm = cols * CELL_CM;
+  const gridHcm = rows * CELL_CM;
+
+  const gridAreaX = frameX + LEFT_GUTTER;
+  const gridAreaY = frameY + HEADER_H;
+  const gridAreaW = frameW - LEFT_GUTTER - 0.6;
+  const gridAreaH = frameH - HEADER_H - FOOTER_H;
+
+  const startX = gridWcm <= gridAreaW ? gridAreaX + (gridAreaW - gridWcm) / 2 : gridAreaX;
+  const startY = gridHcm <= gridAreaH ? gridAreaY + (gridAreaH - gridHcm) / 2 : gridAreaY;
+
+  // label gauche (vertical)
+  const labelGap = 0.25;
+  const labelW = 1.1;
+  const labelH = gridHcm / 2;
+
+  const labelX = startX - labelGap - labelW;
+  const labelY = startY + gridHcm - labelH;
+
+  pdf.setFillColor(C_NAME.r, C_NAME.g, C_NAME.b);
+  pdf.setDrawColor(C_BLACK.r, C_BLACK.g, C_BLACK.b);
+  pdf.setLineWidth(0.06);
+  pdf.rect(labelX, labelY, labelW, labelH, "FD");
+
+  pdf.setTextColor(C_BLACK.r, C_BLACK.g, C_BLACK.b);
+  try {
+    pdf.setFont("hobo", "normal");
+  } catch {
+    pdf.setFont("helvetica", "bold");
+  }
+  pdf.setFontSize(15);
+
+  const textX = labelX + 0.7;
+  const textY = labelY + labelH - 0.25;
+
+  pdf.text(boardName || "", textX, textY, { angle: 90, align: "left" });
+
+  // ombre grille
+  pdf.setFillColor(0, 0, 0);
+  pdf.setGState(new (pdf as any).GState({ opacity: 0.12 }));
+  pdf.rect(startX + 0.1, startY + 0.1, gridWcm, gridHcm, "F");
+  pdf.setGState(new (pdf as any).GState({ opacity: 1 }));
+
+  // grille
+  pdf.setLineWidth(0.04);
+  pdf.setDrawColor(C_GRID.r, C_GRID.g, C_GRID.b);
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = startX + c * CELL_CM;
+      const y = startY + r * CELL_CM;
+
+      pdf.setFillColor(C_CELL.r, C_CELL.g, C_CELL.b);
+      pdf.rect(x, y, CELL_CM, CELL_CM, "FD");
+    }
+  }
+
+  // tiles
+  const imgCache = new Map<string, HTMLImageElement>();
+  const fullTileCache = new Map<string, HTMLCanvasElement>();
+  const overlayImgCache = new Map<string, HTMLImageElement>();
+
+  async function getImg(type: string) {
+    const cached = imgCache.get(type);
+    if (cached) return cached;
+    const img = await loadImage(getTileUrl(type));
+    imgCache.set(type, img);
+    return img;
+  }
+
+  async function getOverlayImg(src: string) {
+    const cached = overlayImgCache.get(src);
+    if (cached) return cached;
+    const img = await loadImage(src);
+    overlayImgCache.set(src, img);
+    return img;
+  }
+
+  function getAnchorKey(cellKey: string) {
+    return getAnchorKeyFromCellKey(cellKey, grid);
+  }
+
+  function getItem(anchorKey: string) {
+    const cell = grid[anchorKey];
+    if (cell && isAnchor(cell)) return cell.item;
+    return null;
+  }
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cellKey = `${r},${c}`;
+      const anchorKey = getAnchorKey(cellKey);
+      if (!anchorKey) continue;
+
+      const it = getItem(anchorKey);
+      if (!it) continue;
+
+      const baseW = it.baseSize.w;
+      const baseH = it.baseSize.h;
+      const rot = getTileRotation(it);
+
+      const { r: ar, c: ac } = getCellRC(anchorKey);
+      const dx = c - ac;
+      const dy = r - ar;
+
+      const { sx, sy } = mapDisplayToSource(dx, dy, baseW, baseH, rot);
+
+      const fullKey = `${anchorKey}|${it.type}|${baseW}x${baseH}`;
+      let fullCanvas = fullTileCache.get(fullKey);
+
+      if (!fullCanvas) {
+        const img = await getImg(it.type);
+        fullCanvas = buildFullTileCanvas(img, baseW, baseH, CELL_PX);
+        fullTileCache.set(fullKey, fullCanvas);
+      }
+
+      const cellCanvas = cropCellFromFullTile(fullCanvas, sx, sy, CELL_PX);
+
+      const overlaySrc = it.tileType === "road" ? getRoadOverlay(it) : null;
+      if (overlaySrc) {
+        const ovImg = await getOverlayImg(overlaySrc);
+        const ctx = cellCanvas.getContext("2d");
+        if (ctx) {
+          ctx.imageSmoothingEnabled = true;
+          const w = cellCanvas.width;
+          const h = cellCanvas.height;
+
+          const iw = ovImg.naturalWidth || 1;
+          const ih = ovImg.naturalHeight || 1;
+          const scale = Math.min(w / iw, h / ih);
+          const dw = iw * scale;
+          const dh = ih * scale;
+
+          if (rot) {
+            ctx.save();
+            ctx.translate(w / 2, h / 2);
+            ctx.rotate((rot * Math.PI) / 180);
+            ctx.drawImage(ovImg, -dw / 2, -dh / 2, dw, dh);
+            ctx.restore();
+          } else {
+            ctx.drawImage(ovImg, (w - dw) / 2, (h - dh) / 2, dw, dh);
+          }
+        }
+      }
+
+      const dataUrl = cellCanvas.toDataURL("image/png");
+
+      const x = startX + c * CELL_CM;
+      const y = startY + r * CELL_CM;
+      pdf.addImage(dataUrl, "PNG", x, y, CELL_CM, CELL_CM);
+    }
+  }
+
+  pdf.save(`${safePdfName(boardName)}.pdf`);
+}
+
+// -------------------------------------------------------------------------
+
 function getRectsForCell(cellKey: string, grid: Record<string, Cell>, rows: number, cols: number) {
   const anchorKey = getAnchorKeyFromCellKey(cellKey, grid);
   if (!anchorKey) return { top: false, right: false, bottom: false, left: false };
@@ -474,6 +755,8 @@ export default function BoardBuilder() {
   const rows = 6;
   const cols = 8;
 
+  const LS_KEY = "dtts_boardbuilder_grid_v1";
+
   const [isGameMode, setIsGameMode] = useState(false);
 
   const getTileUrl = (type: string) => new URL(`../assets/tiles/${type}.png`, import.meta.url).href;
@@ -522,11 +805,34 @@ export default function BoardBuilder() {
     []
   );
 
-  const [grid, setGrid] = useState<Record<string, Cell>>(() => {
+  const makeEmptyGrid = () => {
     const init: Record<string, Cell> = {};
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) init[`${r},${c}`] = null;
     return init;
+  };
+
+  const [grid, setGrid] = useState<Record<string, Cell>>(() => {
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (!raw) return makeEmptyGrid();
+      const parsed = JSON.parse(raw) as Record<string, Cell>;
+
+      const normalized = makeEmptyGrid();
+      for (const k of Object.keys(normalized)) normalized[k] = (k in parsed ? parsed[k] : null) ?? null;
+      return normalized;
+    } catch {
+      return makeEmptyGrid();
+    }
   });
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      try {
+        localStorage.setItem(LS_KEY, JSON.stringify(grid));
+      } catch {}
+    }, 150);
+    return () => window.clearTimeout(t);
+  }, [grid]);
 
   const [selectedCell, setSelectedCell] = useState<string | null>(null);
 
@@ -534,7 +840,7 @@ export default function BoardBuilder() {
   const [cellSize, setCellSize] = useState<number>(64);
 
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
-  const [boardName, setBoardName] = useState("");
+  const [boardName, setBoardName] = useState("Quartier #" + Math.floor(Math.random() * 10000));
 
   useLayoutEffect(() => {
     const el = gridAreaRef.current;
@@ -575,7 +881,17 @@ export default function BoardBuilder() {
     return `${nr},${nc}`;
   }
 
+  // ---------------------------------------------------------------------
+  // CLEAR BOARD (utilisé par Palette + Options)
+  function clearBoard() {
+    if (isGameMode) return; // en mode jeu, on bloque
+    setGrid(makeEmptyGrid());
+    setSelectedCell(null);
+  }
+  // ---------------------------------------------------------------------
+
   function placeAtCell(payload: DragPayload, droppedCell: string) {
+    if (isGameMode) return; // en mode jeu, pas de placement
     setGrid((prev) => {
       const targetAnchor = getDropAnchorCell(droppedCell, payload);
 
@@ -633,6 +949,7 @@ export default function BoardBuilder() {
   }
 
   function removePlacedId(placedId: string) {
+    if (isGameMode) return; // en mode jeu, pas de suppression
     setGrid((prev) => {
       const anchorKey =
         Object.keys(prev).find((k) => {
@@ -650,6 +967,7 @@ export default function BoardBuilder() {
   }
 
   function setSelectedOption<K extends keyof PlacedOptions>(key: K, value: PlacedOptions[K]) {
+    if (isGameMode) return; // en mode jeu, pas de modif
     if (!selectedCell) return;
     setGrid((prev) => {
       const anchorKey = getAnchorKeyFromCellKey(selectedCell, prev);
@@ -673,6 +991,7 @@ export default function BoardBuilder() {
   }
 
   function deleteSelected() {
+    if (isGameMode) return; // en mode jeu, pas de suppression
     if (!selectedCell) return;
     setGrid((prev) => {
       const anchorKey = getAnchorKeyFromCellKey(selectedCell, prev);
@@ -686,6 +1005,7 @@ export default function BoardBuilder() {
   }
 
   function rotateSelectedTile() {
+    if (isGameMode) return; // en mode jeu, pas de rotation
     if (!selectedCell) return;
 
     setGrid((prev) => {
@@ -698,13 +1018,12 @@ export default function BoardBuilder() {
       const curr = normalizeOptions(cell.item);
       const currRot = getTileRotation(curr);
 
-      const allowFull = is1x1(curr); // ✅ 1x1 => 0/90/180/270, sinon 0/90
+      const allowFull = is1x1(curr);
       const nextRot = nextRotation(currRot, allowFull);
 
       const baseW = curr.baseSize.w;
       const baseH = curr.baseSize.h;
 
-      // footprint : swap uniquement si 90/270
       const swap = nextRot === 90 || nextRot === 270;
       const nextSize = swap ? { w: baseH, h: baseW } : { w: baseW, h: baseH };
 
@@ -717,9 +1036,8 @@ export default function BoardBuilder() {
         options: { ...curr.options, rotation: nextRot },
       });
 
-      // segments (école / safe place) : on applique le delta (CW) par pas de 90
       if (candidate.tileType === "school" || candidate.tileType === "safe_place") {
-        const steps = rotationDeltaCW(currRot, nextRot); // 0..3
+        const steps = rotationDeltaCW(currRot, nextRot);
         const startW = curr.size.w;
         const startH = curr.size.h;
 
@@ -736,18 +1054,23 @@ export default function BoardBuilder() {
     });
   }
 
+  // ---------------------------------------------------------------------
+  // MACROS CLAVIER : bloquées en mode jeu
   useEffect(() => {
     document.body.style.overflow = "hidden";
 
     function onKeyDown(ev: KeyboardEvent) {
+      if (isGameMode) return; // ✅ bloque toutes les macros en mode jeu
       if (!selectedCell) return;
 
       if (ev.key === "Delete" || ev.key === "Backspace") {
+        ev.preventDefault();
         deleteSelected();
         return;
       }
 
       if (ev.key.toLowerCase() === "r") {
+        ev.preventDefault();
         rotateSelectedTile();
       }
     }
@@ -757,16 +1080,8 @@ export default function BoardBuilder() {
       document.body.style.overflow = "";
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [selectedCell]);
-
-  function clearBoard() {
-    setGrid(() => {
-      const init: Record<string, Cell> = {};
-      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) init[`${r},${c}`] = null;
-      return init;
-    });
-    setSelectedCell(null);
-  }
+  }, [selectedCell, isGameMode]);
+  // ---------------------------------------------------------------------
 
   function computeCellZIndex(cellKey: string): number {
     const anchorKey = getAnchorKeyFromCellKey(cellKey, grid);
@@ -803,6 +1118,7 @@ export default function BoardBuilder() {
   const selectedItem = selectedCell ? getAnchorItem(selectedCell, grid) : null;
 
   function setTopAt(index: number, v: boolean) {
+    if (isGameMode) return;
     if (!selectedItem) return;
     if (selectedItem.tileType !== "school" && selectedItem.tileType !== "safe_place") return;
     const w = selectedItem.size.w;
@@ -812,6 +1128,7 @@ export default function BoardBuilder() {
   }
 
   function setBottomAt(index: number, v: boolean) {
+    if (isGameMode) return;
     if (!selectedItem) return;
     if (selectedItem.tileType !== "school" && selectedItem.tileType !== "safe_place") return;
     const w = selectedItem.size.w;
@@ -821,6 +1138,7 @@ export default function BoardBuilder() {
   }
 
   function setLeftAt(index: number, v: boolean) {
+    if (isGameMode) return;
     if (!selectedItem) return;
     if (selectedItem.tileType !== "school" && selectedItem.tileType !== "safe_place") return;
     const h = selectedItem.size.h;
@@ -830,6 +1148,7 @@ export default function BoardBuilder() {
   }
 
   function setRightAt(index: number, v: boolean) {
+    if (isGameMode) return;
     if (!selectedItem) return;
     if (selectedItem.tileType !== "school" && selectedItem.tileType !== "safe_place") return;
     const h = selectedItem.size.h;
@@ -921,31 +1240,37 @@ export default function BoardBuilder() {
     );
   }
 
-  function onPrint() {
-    setSelectedCell(null);
-    window.print();
-  }
-
   function onShare() {
     console.log("TODO: share");
+  }
+
+  async function onDownloadPdf() {
+    await generateBoardPdf({
+      rows,
+      cols,
+      grid,
+      boardName: boardName || "DTTS - plateau",
+      getTileUrl,
+      getRoadOverlay: getRoadOptionOverlay,
+    });
   }
 
   return (
     <div className="h-screen w-screen bg-neutral-950 text-neutral-100">
       <style>{`
-    @media print {
-      @page { size: A4 landscape; margin: 10mm; }
-      html, body { height: auto !important; overflow: visible !important; background: white !important; }
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      body * { visibility: hidden !important; }
-      .bb-print-target, .bb-print-target * { visibility: visible !important; }
-      .bb-print-target { position: fixed !important; inset: 0 !important; padding: 0 !important; margin: 0 !important; }
-      .bb-print-cell { width: 3cm !important; height: 3cm !important; transform: translate(145px, 88px) !important; }
-      .bb-print-grid { grid-template-columns: repeat(var(--bb-cols), 3cm) !important; grid-template-rows: repeat(var(--bb-rows), 3cm) !important; gap: 0 !important; }
-      .bb-print-input { transform: rotate(90deg) !important; position: absolute !important; left: 48px !important; top: -12px !important; transform-origin: left center !important; }
-      .bb-print-bottom-line { display: block !important; position: absolute !important; top: 270px !important; transform: rotate(90deg) !important; right: -235px !important; font-size: 9pt !important; }  
-    }
-    `}</style>
+        @media print {
+          @page { size: A4 landscape; margin: 10mm; }
+          html, body { height: auto !important; overflow: visible !important; background: white !important; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          body * { visibility: hidden !important; }
+          .bb-print-target, .bb-print-target * { visibility: visible !important; }
+          .bb-print-target { position: fixed !important; inset: 0 !important; padding: 0 !important; margin: 0 !important; }
+          .bb-print-cell { width: 3cm !important; height: 3cm !important; transform: translate(145px, 88px) !important; }
+          .bb-print-grid { grid-template-columns: repeat(var(--bb-cols), 3cm) !important; grid-template-rows: repeat(var(--bb-rows), 3cm) !important; gap: 0 !important; }
+          .bb-print-input { transform: rotate(90deg) !important; position: absolute !important; left: 48px !important; top: -12px !important; transform-origin: left center !important; }
+          .bb-print-bottom-line { display: block !important; position: absolute !important; top: 270px !important; transform: rotate(90deg) !important; right: -235px !important; font-size: 9pt !important; }  
+        }
+      `}</style>
 
       <div className="flex h-full w-full flex-col p-4 bb-no-print">
         <header className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -954,20 +1279,23 @@ export default function BoardBuilder() {
             <p className="text-sm text-neutral-300">Déplace des tuiles vers la grille pour créer ton plateau de jeu personnalisé.</p>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {!isGameMode && (
+          <div className="flex flex-wrap gap-2 items-center">
+            {!isGameMode ? (
               <>
-                <button className="rounded-xl bg-neutral-800 px-3 py-2 text-sm hover:bg-neutral-700" onClick={() => navigate("/community")}>
-                  Créations de la communauté
+                <button className="rounded-xl bg-neutral-900 px-3 py-2 text-sm" onClick={() => navigate("/community")} disabled={true}>
+                  Créations de la communauté (prochainement)
                 </button>
-                <button className="rounded-xl bg-neutral-800 px-3 py-2 text-sm hover:bg-neutral-700" onClick={() => setIsPrintModalOpen(true)}>
-                  Imprimer
+
+                <button className="rounded-xl bg-neutral-800 px-3 py-2 text-sm hover:bg-neutral-700" onClick={() => onDownloadPdf()}>
+                  Exporter (PDF)
                 </button>
               </>
+            ) : (
+              <span>Jouez directement sur votre écran !</span>
             )}
 
             <button className="rounded-xl bg-neutral-800 px-3 py-2 text-sm hover:bg-neutral-700" onClick={() => setIsGameMode((v) => !v)}>
-              {isGameMode ? "Quitter le mode jeu" : "Mode jeu"}
+              {isGameMode ? "Quitter le mode jeu" : "Passer en mode jeu"}
             </button>
           </div>
         </header>
@@ -980,7 +1308,7 @@ export default function BoardBuilder() {
             ].join(" ")}
           >
             <div className="h-full">
-              <Palette palette={palette} getTileUrl={getTileUrl} onRemovePlacedId={removePlacedId} parsePayload={parseDragPayload} />
+              <Palette palette={palette} getTileUrl={getTileUrl} onRemovePlacedId={removePlacedId} parsePayload={parseDragPayload} onClearTiles={clearBoard} />
             </div>
           </aside>
 
@@ -1001,9 +1329,10 @@ export default function BoardBuilder() {
               parsePayload={parseDragPayload}
               placeAtCell={placeAtCell}
               getDropAnchorCell={getDropAnchorCell}
-              startDragMoveFromCell={(e, it, cellKey, anchorKey) =>
-                startDragMoveFromCell(e, it, cellKey, anchorKey, cellSize, getTileUrl, getRoadOptionOverlay)
-              }
+              startDragMoveFromCell={(e, it, cellKey, anchorKey) => {
+                if (isGameMode) return; // ✅ en mode jeu, pas de drag move
+                startDragMoveFromCell(e, it, cellKey, anchorKey, cellSize, getTileUrl, getRoadOptionOverlay);
+              }}
               renderTileLayer={renderTileLayer}
             />
           </main>
@@ -1025,19 +1354,23 @@ export default function BoardBuilder() {
                 setBottomAt={setBottomAt}
                 setLeftAt={setLeftAt}
                 setRightAt={setRightAt}
-                clearBoard={() => {}}
+                clearBoard={clearBoard}
                 getTileRotation={getTileRotation}
               />
             </div>
           </aside>
         </div>
       </div>
+
       {isPrintModalOpen ? (
         <PrintModal
           isOpen={isPrintModalOpen}
           onClose={() => setIsPrintModalOpen(false)}
           boardName={boardName}
-          onPrint={() => window.print()}
+          onPrint={async () => {
+            await onDownloadPdf();
+            setIsPrintModalOpen(false);
+          }}
           onShare={() => {
             onShare();
             setIsPrintModalOpen(false);

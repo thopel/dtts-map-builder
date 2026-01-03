@@ -1,139 +1,73 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 
-type MiniCell = { tileType?: string; type?: string };
-type BoardJsonLike = {
-  rows?: number;
-  cols?: number;
-  grid?: Record<string, MiniCell>;
-  items?: Array<MiniCell & { at?: string; cellKey?: string }>;
-};
+import Grid from "../components/Grid";
+import type { Cell, DragPayload, PlacedItem } from "../views/BoardBuilder";
 
 type CommunityCreation = {
   id: string;
   title: string;
   publishedAt: string;
-  boardJson: BoardJsonLike;
+  // On suppose que tu stockes exactement ce qu’il faut pour re-rendre la grille.
+  rows: number;
+  cols: number;
+  grid: Record<string, Cell>;
+  boardName: string;
 };
 
-function formatDate(iso: string) {
+function formatDateTime(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("fr-FR", { year: "numeric", month: "long", day: "2-digit" });
+  return d.toLocaleString("fr-FR", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
-function BigBoardPreview({ boardJson }: { boardJson: BoardJsonLike }) {
-  const rows = Math.max(1, Math.min(80, boardJson?.rows ?? 10));
-  const cols = Math.max(1, Math.min(80, boardJson?.cols ?? 10));
-
-  const occupied = useMemo(() => {
-    const m = new Map<number, string>();
-
-    const parseKey = (key: string) => {
-      const cleaned = key.replace(",", "-").replace("_", "-");
-      const [r, c] = cleaned.split("-").map((x) => Number(x));
-      if (!Number.isFinite(r) || !Number.isFinite(c)) return null;
-      return { r, c };
-    };
-
-    if (boardJson?.grid) {
-      for (const [k, v] of Object.entries(boardJson.grid)) {
-        const rc = parseKey(k);
-        if (!rc) continue;
-        const tt = v?.tileType ?? v?.type ?? "unknown";
-        if (rc.r < 0 || rc.c < 0 || rc.r >= rows || rc.c >= cols) continue;
-        m.set(rc.r * cols + rc.c, tt);
-      }
-    }
-
-    if (Array.isArray(boardJson?.items)) {
-      for (const it of boardJson.items) {
-        const key = it.cellKey ?? it.at;
-        if (!key) continue;
-        const rc = parseKey(key);
-        if (!rc) continue;
-        const tt = it?.tileType ?? it?.type ?? "unknown";
-        if (rc.r < 0 || rc.c < 0 || rc.r >= rows || rc.c >= cols) continue;
-        m.set(rc.r * cols + rc.c, tt);
-      }
-    }
-
-    return m;
-  }, [boardJson, rows, cols]);
-
-  const tileClass = (tileType: string) => {
-    const t = (tileType || "").toLowerCase();
-    if (t.includes("road")) return "bg-white/12 border-white/10";
-    if (t.includes("school")) return "bg-amber-500/18 border-amber-400/25";
-    if (t.includes("safe")) return "bg-emerald-500/18 border-emerald-400/25";
-    if (t.includes("forest")) return "bg-lime-500/14 border-lime-400/18";
-    return "bg-sky-500/12 border-sky-400/18";
-  };
-
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="text-sm font-semibold text-white/90">Aperçu</div>
-        <div className="text-xs text-white/60">
-          {rows}×{cols} — {occupied.size} tuile(s)
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-white/10 bg-black/40 p-3">
-        <div className="grid gap-[3px] rounded-lg bg-black/40 p-2" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
-          {Array.from({ length: rows * cols }).map((_, i) => {
-            const tt = occupied.get(i);
-            return (
-              <div
-                key={i}
-                className={["aspect-square rounded-[4px] border", tt ? tileClass(tt) : "bg-white/[0.03] border-white/[0.04]"].join(" ")}
-                title={tt ? tt : ""}
-              />
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// TODO: remplace par ton API
+/**
+ * TODO: remplace par ton fetch réel :
+ * - GET /community/:id
+ * - doit renvoyer rows/cols/grid/boardName (et idéalement title/publishedAt)
+ */
 async function fetchCreationById(id: string): Promise<CommunityCreation | null> {
-  // Démo minimale
+  // DEMO (à remplacer)
   return {
     id,
     title: "Création communautaire",
     publishedAt: new Date().toISOString(),
-    boardJson: {
-      rows: 8,
-      cols: 10,
-      items: [
-        { tileType: "road", at: "2-2" },
-        { tileType: "school", at: "4-6" },
-      ],
-    },
+    rows: 6,
+    cols: 8,
+    boardName: "Ma carte",
+    grid: {} as Record<string, Cell>,
   };
 }
 
 export default function CommunityItem() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const decodedId = useMemo(() => (id ? decodeURIComponent(id) : ""), [id]);
+  const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [item, setItem] = useState<CommunityCreation | null>(null);
 
+  // Ref requis par ton Grid (ResizeObserver)
+  const gridAreaRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
     let alive = true;
+
     (async () => {
       try {
         setLoading(true);
         setError(null);
 
         if (!decodedId) {
-          setItem(null);
           setError("ID manquant.");
+          setItem(null);
           return;
         }
 
@@ -141,8 +75,8 @@ export default function CommunityItem() {
         if (!alive) return;
 
         if (!data) {
-          setItem(null);
           setError("Création introuvable.");
+          setItem(null);
           return;
         }
 
@@ -177,79 +111,225 @@ export default function CommunityItem() {
     }
   }
 
+  function openInEditor() {
+    // Ajuste si ton éditeur n’est pas "/"
+    navigate(`/?communityId=${encodeURIComponent(decodedId)}`);
+  }
+
   function handlePrint() {
+    // CSS plus bas -> n’imprime QUE la zone rouge
     window.print();
   }
 
+  // ---- Mode lecture seule pour Grid ----
+  const selectedCell = null;
+
+  const noopSetSelectedCell = () => {};
+  const noopOnBoardNameChange = () => {};
+
+  const computeCellZIndex = () => 0;
+
+  // IMPORTANT: si tu as déjà une vraie méthode globale, remplace cette fonction
+  // pour pointer vers tes assets.
+  const getTileUrl = (type: string) => {
+    // Exemple : /tiles/<type>.png
+    return `/tiles/${type}.png`;
+  };
+
+  // On essaye d’être robuste sur la structure de Cell
+  const getAnchorKeyFromCellKey = (cellKey: string) => {
+    const cell = item?.grid?.[cellKey] as any;
+    if (!cell) return null;
+    // Si ton Cell contient un anchorKey
+    if (typeof cell.anchorKey === "string") return cell.anchorKey;
+    // Si le cell lui-même est un anchor (contient item)
+    if (cell.item || cell.it || cell.placedItem) return cellKey;
+    return null;
+  };
+
+  const getAnchorItem = (anchorKey: string) => {
+    const cell = item?.grid?.[anchorKey] as any;
+    if (!cell) return null;
+    return (cell.item ?? cell.it ?? cell.placedItem ?? null) as PlacedItem | null;
+  };
+
+  const parsePayload = () => null as DragPayload | null;
+  const placeAtCell = () => {};
+  const getDropAnchorCell = (targetCell: string) => targetCell;
+
+  const startDragMoveFromCell = (e: React.DragEvent) => {
+    // On bloque le drag en communauté
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  // Rendu simple : image en background (tu peux réinjecter ton overlay si besoin)
+  const renderTileLayer = ({ it, tileBg }: { it: PlacedItem; tileBg: string | null; cellKey: string }) => {
+    // si tileBg est null, on affiche rien
+    if (!tileBg) return null;
+    return (
+      <div className="h-full w-full">
+        <img src={tileBg} alt={it.type} draggable={false} className="h-full w-full object-cover" />
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-black text-white">
-      {/* Header */}
-      <div className="sticky top-0 z-20 border-b border-white/10 bg-black/70 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-4">
-          <div>
-            <Link to="/community" className="text-sm text-white/60 hover:text-white/80 hover:underline">
-              ← Retour aux créations
-            </Link>
-            <h1 className="mt-2 text-xl font-semibold tracking-tight">{loading ? "Chargement…" : item?.title ?? "Création"}</h1>
-            {!loading && item && <p className="mt-1 text-sm text-white/60">Publié le {formatDate(item.publishedAt)}</p>}
+      {/* Bandeau top */}
+      <div className="flex items-start justify-between gap-3 px-5 py-4">
+        <div>
+          <h1 className="text-xl font-semibold">Editeur de plateau de jeu pour Don&apos;t Talk To Strangers</h1>
+          <div className="mt-1 text-sm text-white/70">
+            {loading ? "Chargement…" : item ? `Publié le ${formatDateTime(item.publishedAt)} — ${item.title}` : "—"}
           </div>
+        </div>
 
-          <div className="flex items-center gap-2">
-            <button onClick={() => navigate("/")} className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm hover:bg-white/10">
-              Accéder à l’éditeur
-            </button>
-          </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={copyLink}
+            disabled={loading || !item}
+            className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
+          >
+            Copier le lien
+          </button>
+
+          <button
+            onClick={openInEditor}
+            disabled={loading || !item}
+            className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
+          >
+            Ouvrir dans l&apos;éditeur
+          </button>
+
+          <button
+            onClick={handlePrint}
+            disabled={loading || !item}
+            className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
+          >
+            Imprimer
+          </button>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="mx-auto w-full max-w-6xl px-4 pb-20 pt-6">
-        {error && <div className="mb-6 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-100">{error}</div>}
+      <div className="px-5 pb-8">
+        {error && <div className="mb-4 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-100">{error}</div>}
 
-        {!loading && item && (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_360px]">
-            <BigBoardPreview boardJson={item.boardJson} />
-
-            <aside className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <div className="text-sm font-semibold text-white/90">Infos</div>
-
-              <div className="mt-3 text-sm">
-                <div className="text-white/60">ID</div>
-                <div className="mt-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-xs">{item.id}</div>
-
-                <div className="mt-4 text-white/60">Actions</div>
-                <div className="mt-2 grid grid-cols-1 gap-2">
-                  <button onClick={copyLink} className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm hover:bg-white/10">
-                    Copier le lien
-                  </button>
-                  <button onClick={handlePrint} className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm hover:bg-white/10">
-                    Imprimer
-                  </button>
-                  <button onClick={() => navigate("/")} className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm hover:bg-white/10">
-                    Editer cette carte
-                  </button>
+        {/* Zone rouge imprimable */}
+        <div
+          className="print-zone bb-print-target relative overflow-hidden rounded-2xl bg-[#FF1B1B] shadow-[0_0_0_2px_rgba(0,0,0,0.25)_inset]"
+          style={{ minHeight: "calc(100vh - 140px)" }}
+        >
+          {/* Grid full zone */}
+          <div className="absolute inset-0">
+            <div className="h-full w-full">
+              {loading || !item ? (
+                <div className="flex h-full w-full items-center justify-center">
+                  <div className="rounded-xl bg-black/10 px-4 py-3 text-sm text-black/80">Chargement…</div>
                 </div>
-              </div>
-            </aside>
+              ) : (
+                <div className="h-full w-full">
+                  <Grid
+                    rows={item.rows}
+                    cols={item.cols}
+                    grid={item.grid}
+                    boardName={item.boardName}
+                    onBoardNameChange={noopOnBoardNameChange}
+                    selectedCell={selectedCell}
+                    setSelectedCell={noopSetSelectedCell}
+                    gridAreaRef={gridAreaRef}
+                    computeCellZIndex={computeCellZIndex}
+                    getTileUrl={getTileUrl}
+                    getAnchorKeyFromCellKey={getAnchorKeyFromCellKey}
+                    getAnchorItem={getAnchorItem}
+                    parsePayload={parsePayload}
+                    placeAtCell={placeAtCell}
+                    getDropAnchorCell={getDropAnchorCell}
+                    startDragMoveFromCell={startDragMoveFromCell as any}
+                    renderTileLayer={renderTileLayer}
+                  />
+                </div>
+              )}
+            </div>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Footer */}
-      <footer className="fixed bottom-0 left-0 right-0 z-20 border-t border-white/10 bg-black/80 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3 text-xs text-white/60">
-          <span>Contenu non officiel — Créations partagées par la communauté</span>
-          <span>DTTS Builder — v1.0.0</span>
-        </div>
-      </footer>
-
-      {/* Print: on cache header/footer/boutons */}
+      {/* Print: n’imprimer QUE la zone rouge */}
       <style>{`
-        @media print {
-          .sticky, footer, button, a[href="/community"] { display: none !important; }
-          body { background: #fff !important; }
-        }
-      `}</style>
+  @media print {
+    @page { size: A4 landscape; margin: 10mm; }
+
+    html, body {
+      height: auto !important;
+      overflow: visible !important;
+      background: white !important;
+    }
+
+    body {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* On cache tout */
+    body * { visibility: hidden !important; }
+
+    /* Sauf la zone à imprimer */
+    .bb-print-target, .bb-print-target * { visibility: visible !important; }
+
+    /* La zone prend toute la feuille */
+    .bb-print-target {
+      position: fixed !important;
+      inset: 0 !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      border-radius: 0 !important;
+      overflow: hidden !important;
+    }
+
+    /* Taille des cases */
+    .bb-print-cell {
+      width: 3cm !important;
+      height: 3cm !important;
+    }
+
+    /* IMPORTANT: on place/décale la GRILLE, pas les cellules */
+    .bb-print-grid {
+      grid-template-columns: repeat(var(--bb-cols), 3cm) !important;
+      grid-template-rows: repeat(var(--bb-rows), 3cm) !important;
+      gap: 0 !important;
+
+      /* Ajuste ces valeurs pour centrer comme tu veux */
+      transform: translate(145px, 88px) !important;
+      transform-origin: top left !important;
+    }
+
+    /* Cartouche (input) tourné, façon ton exemple */
+    .bb-print-input {
+      transform: rotate(90deg) !important;
+      position: absolute !important;
+      left: 48px !important;
+      top: -12px !important;
+      transform-origin: left center !important;
+    }
+
+    /* Ligne bas de page */
+    .bb-print-bottom-line {
+      display: block !important;
+      position: absolute !important;
+      top: 270px !important;
+      transform: rotate(90deg) !important;
+      right: -235px !important;
+      font-size: 9pt !important;
+      color: #000 !important;
+    }
+
+    /* Optionnel: éviter que le fond noir du site “pollue” */
+    .bb-print-target * {
+      box-shadow: none !important;
+    }
+  }
+`}</style>
     </div>
   );
 }

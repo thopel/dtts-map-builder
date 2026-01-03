@@ -1,4 +1,3 @@
-import React from "react";
 import type { DragPayload, PaletteItem } from "../views/BoardBuilder";
 
 type Props = {
@@ -6,9 +5,10 @@ type Props = {
   getTileUrl: (type: string) => string;
   onRemovePlacedId: (placedId: string) => void;
   parsePayload: (raw: string) => DragPayload | null;
+  onClearTiles: () => void;
 };
 
-export default function Palette({ palette, getTileUrl, onRemovePlacedId, parsePayload }: Props) {
+export default function Palette({ palette, getTileUrl, onRemovePlacedId, parsePayload, onClearTiles }: Props) {
   return (
     <aside
       className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900/40 h-full"
@@ -27,6 +27,14 @@ export default function Palette({ palette, getTileUrl, onRemovePlacedId, parsePa
       <div className="border-b border-neutral-800 p-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-neutral-200">Tuiles</h2>
+
+          <button
+            type="button"
+            onClick={onClearTiles}
+            className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100"
+          >
+            Tout retirer
+          </button>
         </div>
       </div>
 

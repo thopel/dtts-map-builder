@@ -14,7 +14,7 @@ type Props = {
   title?: string;
 };
 
-export default function PrintModal({ isOpen, onClose, onPrint, onShare, shareDisabled, title = "Avant d’imprimer" }: Props) {
+export default function PrintModal({ isOpen, onClose, onPrint, onShare, shareDisabled, title = "Avant d'exporter" }: Props) {
   // fermeture avec ESC
   useEffect(() => {
     if (!isOpen) return;
@@ -36,7 +36,7 @@ export default function PrintModal({ isOpen, onClose, onPrint, onShare, shareDis
       <div className="relative w-[min(720px,92vw)] rounded-2xl bg-white shadow-xl">
         <div className="border-b border-black/10 p-5">
           <h2 className="text-lg font-semibold text-black">{title}</h2>
-          <p className="mt-1 text-sm text-black/70">Avant d’imprimer, vous pouvez choisir de partager votre carte avec la communauté.</p>
+          <p className="mt-1 text-sm text-black/70">Avant d’exporter, vous pouvez choisir de partager votre carte avec la communauté.</p>
         </div>
 
         <div className="p-5 space-y-4">
@@ -79,7 +79,7 @@ export default function PrintModal({ isOpen, onClose, onPrint, onShare, shareDis
               }}
               className="rounded-xl border border-black/15 bg-white px-4 py-2 text-sm font-medium text-black hover:bg-black/5"
             >
-              Imprimer
+              Télécharger le pdf
             </button>
           </div>
         </div>
