@@ -1,6 +1,6 @@
-import React from "react";
 import type { PlacedItem, PlacedOptions, TileRotation } from "../views/BoardBuilder";
 import { IconButton, Toggle } from "../views/BoardBuilder";
+import { version } from "../../package.json";
 
 type Props = {
   selectedCell: string | null;
@@ -60,11 +60,11 @@ export default function Options({
 
                 <div className="mt-3 flex flex-wrap gap-2">
                   <IconButton title="Supprimer" onClick={deleteSelected}>
-                    Supprimer
+                    Supprimer (suppr)
                   </IconButton>
 
                   <IconButton title="Pivoter (R)" onClick={rotateSelectedTile}>
-                    Pivoter ⟳
+                    Pivoter (R)
                   </IconButton>
                 </div>
 
@@ -168,7 +168,7 @@ export default function Options({
           <div className="flex flex-col gap-1.5">
             <div className="flex justify-between">
               <span className="font-medium text-neutral-100">Contenu non officiel</span>
-              <span>v1.0.0</span>
+              <span>v{version}</span>
             </div>
 
             <span className="text-neutral-300">

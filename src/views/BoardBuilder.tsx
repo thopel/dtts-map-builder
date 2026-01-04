@@ -10,6 +10,8 @@ import PrintModal from "../components/PrintModal";
 
 import hoboTtfUrl from "../assets/Hobo.ttf?url";
 
+import { version } from "../../package.json";
+
 export type TileType = "road" | "school" | "safe_place";
 
 export type PaletteItem = {
@@ -363,10 +365,6 @@ function makeDragPreviewEl(it: PlacedItem, cellPx: number, getTileUrl: (type: st
         ov.style.backgroundSize = "contain";
         ov.style.backgroundRepeat = "no-repeat";
         ov.style.backgroundPosition = "center";
-        if (rotation) {
-          ov.style.transform = `rotate(${rotation}deg)`;
-          ov.style.transformOrigin = "50% 50%";
-        }
         cell.appendChild(ov);
       }
 
@@ -445,7 +443,7 @@ async function generateBoardPdf(args: {
 
   const FRAME_PAD = 0.6;
   const FRAME_RADIUS = 0.35;
-  const HEADER_H = 1.1;
+  const HEADER_H = 0.4;
   const FOOTER_H = 3.0;
   const LEFT_GUTTER = 1.0;
 
@@ -458,6 +456,10 @@ async function generateBoardPdf(args: {
   const C_TEXT = { r: 30, g: 30, b: 30 };
   const C_NAME = { r: 245, g: 186, b: 18 };
   const C_BLACK = { r: 0, g: 0, b: 0 };
+
+  // Couleurs overlays (rectangles)
+  const C_BLUE = { r: 59, g: 130, b: 246 }; // proche bg-blue-500
+  const C_ORANGE = { r: 251, g: 146, b: 60 }; // proche bg-orange-400
 
   const safePdfName = (s: string) => {
     const v = (s || "plateau").trim();
@@ -525,16 +527,6 @@ async function generateBoardPdf(args: {
   pdf.setFillColor(C_BG.r, C_BG.g, C_BG.b);
   pdf.roundedRect(frameX, frameY, frameW, frameH, FRAME_RADIUS, FRAME_RADIUS, "F");
 
-  const title = "Carte créée sur dtts-builder.thomaspelfrene.com | Carte de jeu non-officielle | thomaspelfrene.com";
-
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(8);
-  pdf.setTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b);
-
-  const headerTextX = frameX + LEFT_GUTTER + 1.4;
-  const headerTextY = frameY + 0.7;
-  pdf.text(title, headerTextX, headerTextY);
-
   const gridWcm = cols * CELL_CM;
   const gridHcm = rows * CELL_CM;
 
@@ -546,39 +538,19 @@ async function generateBoardPdf(args: {
   const startX = gridWcm <= gridAreaW ? gridAreaX + (gridAreaW - gridWcm) / 2 : gridAreaX;
   const startY = gridHcm <= gridAreaH ? gridAreaY + (gridAreaH - gridHcm) / 2 : gridAreaY;
 
-  // label gauche (vertical)
-  const labelGap = 0.25;
-  const labelW = 1.1;
-  const labelH = gridHcm / 2;
+  // --- TEXTE VERTICAL À GAUCHE ---
+  const sideText = `Carte créée sur dtts-builder.thomaspelfrene.com (v${version}) | Imprimé le ${new Date().toLocaleDateString()} | Carte de jeu non officielle | thomaspelfrene.com`;
 
-  const labelX = startX - labelGap - labelW;
-  const labelY = startY + gridHcm - labelH;
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(8);
+  pdf.setTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b);
 
-  pdf.setFillColor(C_NAME.r, C_NAME.g, C_NAME.b);
-  pdf.setDrawColor(C_BLACK.r, C_BLACK.g, C_BLACK.b);
-  pdf.setLineWidth(0.06);
-  pdf.rect(labelX, labelY, labelW, labelH, "FD");
+  const sideX = frameX + 0.55;
+  const sideY = startY + gridHcm - 0.2;
 
-  pdf.setTextColor(C_BLACK.r, C_BLACK.g, C_BLACK.b);
-  try {
-    pdf.setFont("hobo", "normal");
-  } catch {
-    pdf.setFont("helvetica", "bold");
-  }
-  pdf.setFontSize(15);
+  pdf.text(sideText, sideX, sideY, { angle: 90, align: "left" });
 
-  const textX = labelX + 0.7;
-  const textY = labelY + labelH - 0.25;
-
-  pdf.text(boardName || "", textX, textY, { angle: 90, align: "left" });
-
-  // ombre grille
-  pdf.setFillColor(0, 0, 0);
-  pdf.setGState(new (pdf as any).GState({ opacity: 0.12 }));
-  pdf.rect(startX + 0.1, startY + 0.1, gridWcm, gridHcm, "F");
-  pdf.setGState(new (pdf as any).GState({ opacity: 1 }));
-
-  // grille
+  // --- GRILLE (fond) ---
   pdf.setLineWidth(0.04);
   pdf.setDrawColor(C_GRID.r, C_GRID.g, C_GRID.b);
 
@@ -588,11 +560,37 @@ async function generateBoardPdf(args: {
       const y = startY + r * CELL_CM;
 
       pdf.setFillColor(C_CELL.r, C_CELL.g, C_CELL.b);
-      pdf.rect(x, y, CELL_CM, CELL_CM, "FD");
+      pdf.rect(x, y, CELL_CM, CELL_CM, "F");
     }
   }
 
-  // tiles
+  // --- ENCART JAUNE EN BAS ---
+  const bottomBoxW = gridWcm * 0.5;
+  const bottomBoxH = 0.8;
+  const bottomGap = 0.3;
+
+  const bottomBoxX = startX;
+  const bottomBoxY = startY + gridHcm + bottomGap;
+
+  pdf.setFillColor(C_NAME.r, C_NAME.g, C_NAME.b);
+  pdf.setDrawColor(C_BLACK.r, C_BLACK.g, C_BLACK.b);
+  pdf.setLineWidth(0.06);
+  pdf.rect(bottomBoxX, bottomBoxY, bottomBoxW, bottomBoxH, "FD");
+
+  pdf.setTextColor(C_BLACK.r, C_BLACK.g, C_BLACK.b);
+  try {
+    pdf.setFont("hobo", "normal");
+  } catch {
+    pdf.setFont("helvetica", "bold");
+  }
+  pdf.setFontSize(13);
+
+  const innerPadX = 0.35;
+  const textY = bottomBoxY + 0.55;
+
+  pdf.text(boardName || "", bottomBoxX + innerPadX, textY, { align: "left" });
+
+  // --- TILES ---
   const imgCache = new Map<string, HTMLImageElement>();
   const fullTileCache = new Map<string, HTMLCanvasElement>();
   const overlayImgCache = new Map<string, HTMLImageElement>();
@@ -623,6 +621,7 @@ async function generateBoardPdf(args: {
     return null;
   }
 
+  // 1) Dessin des images de tuiles
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const cellKey = `${r},${c}`;
@@ -658,7 +657,6 @@ async function generateBoardPdf(args: {
         const ovImg = await getOverlayImg(overlaySrc);
         const ctx = cellCanvas.getContext("2d");
         if (ctx) {
-          ctx.imageSmoothingEnabled = true;
           const w = cellCanvas.width;
           const h = cellCanvas.height;
 
@@ -668,23 +666,81 @@ async function generateBoardPdf(args: {
           const dw = iw * scale;
           const dh = ih * scale;
 
-          if (rot) {
-            ctx.save();
-            ctx.translate(w / 2, h / 2);
-            ctx.rotate((rot * Math.PI) / 180);
-            ctx.drawImage(ovImg, -dw / 2, -dh / 2, dw, dh);
-            ctx.restore();
-          } else {
-            ctx.drawImage(ovImg, (w - dw) / 2, (h - dh) / 2, dw, dh);
-          }
+          ctx.drawImage(ovImg, (w - dw) / 2, (h - dh) / 2, dw, dh);
         }
       }
 
       const dataUrl = cellCanvas.toDataURL("image/png");
-
       const x = startX + c * CELL_CM;
       const y = startY + r * CELL_CM;
       pdf.addImage(dataUrl, "PNG", x, y, CELL_CM, CELL_CM);
+    }
+  }
+
+  // 2) Dessin des rectangles (bleu/orange) PAR-DESSUS les tuiles
+  //    On colle le plus possible au rendu EdgeRect (length=60%, thickness=18%, offset=thickness/1.35).
+  const EDGE_LEN = CELL_CM * 0.6;
+  const EDGE_TH = CELL_CM * 0.18;
+  const EDGE_OFF = EDGE_TH / 1.35;
+
+  function drawEdgeRectPdf(cellX: number, cellY: number, side: "top" | "right" | "bottom" | "left", color: typeof C_BLUE) {
+    const strokeW = 0.03;
+
+    pdf.setFillColor(color.r, color.g, color.b);
+    pdf.setDrawColor(0, 0, 0);
+    pdf.setLineWidth(strokeW);
+
+    if (side === "top") {
+      const x = cellX + (CELL_CM - EDGE_LEN) / 2;
+      const y = cellY - EDGE_OFF;
+      pdf.rect(x, y, EDGE_LEN, EDGE_TH, "F");
+      return;
+    }
+
+    if (side === "bottom") {
+      const x = cellX + (CELL_CM - EDGE_LEN) / 2;
+      const y = cellY + CELL_CM - EDGE_TH + EDGE_OFF;
+      pdf.rect(x, y, EDGE_LEN, EDGE_TH, "F");
+      return;
+    }
+
+    if (side === "left") {
+      const x = cellX - EDGE_OFF;
+      const y = cellY + (CELL_CM - EDGE_LEN) / 2;
+      pdf.rect(x, y, EDGE_TH, EDGE_LEN, "F");
+      return;
+    }
+
+    // right
+    const x = cellX + CELL_CM - EDGE_TH + EDGE_OFF;
+    const y = cellY + (CELL_CM - EDGE_LEN) / 2;
+    pdf.rect(x, y, EDGE_TH, EDGE_LEN, "F");
+  }
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cellKey = `${r},${c}`;
+      const anchorKey = getAnchorKeyFromCellKey(cellKey, grid);
+      if (!anchorKey) continue;
+
+      const it = getAnchorItem(anchorKey, grid);
+      if (!it) continue;
+
+      // uniquement school + safe_place (comme ton UI)
+      if (it.tileType !== "school" && it.tileType !== "safe_place") continue;
+
+      const rects = getRectsForCell(cellKey, grid, rows, cols);
+      if (!rects.top && !rects.right && !rects.bottom && !rects.left) continue;
+
+      const cellX = startX + c * CELL_CM;
+      const cellY = startY + r * CELL_CM;
+
+      const color = it.tileType === "school" ? C_BLUE : C_ORANGE;
+
+      if (rects.top) drawEdgeRectPdf(cellX, cellY, "top", color);
+      if (rects.right) drawEdgeRectPdf(cellX, cellY, "right", color);
+      if (rects.bottom) drawEdgeRectPdf(cellX, cellY, "bottom", color);
+      if (rects.left) drawEdgeRectPdf(cellX, cellY, "left", color);
     }
   }
 
@@ -736,13 +792,13 @@ function EdgeRect({ side, color }: { side: "top" | "right" | "bottom" | "left"; 
   const style: React.CSSProperties = (() => {
     switch (side) {
       case "top":
-        return { left: "50%", top: `calc(0px - (${thickness} / 2))`, width: length, height: thickness, transform: "translateX(-50%)" };
+        return { left: "50%", top: `calc(0px - (${thickness} / 1.35))`, width: length, height: thickness, transform: "translateX(-50%)" };
       case "bottom":
-        return { left: "50%", bottom: `calc(0px - (${thickness} / 2))`, width: length, height: thickness, transform: "translateX(-50%)" };
+        return { left: "50%", bottom: `calc(0px - (${thickness} / 1.35))`, width: length, height: thickness, transform: "translateX(-50%)" };
       case "left":
-        return { top: "50%", left: `calc(0px - (${thickness} / 2))`, width: thickness, height: length, transform: "translateY(-50%)" };
+        return { top: "50%", left: `calc(0px - (${thickness} / 1.35))`, width: thickness, height: length, transform: "translateY(-50%)" };
       case "right":
-        return { top: "50%", right: `calc(0px - (${thickness} / 2))`, width: thickness, height: length, transform: "translateY(-50%)" };
+        return { top: "50%", right: `calc(0px - (${thickness} / 1.35))`, width: thickness, height: length, transform: "translateY(-50%)" };
     }
   })();
 
@@ -756,6 +812,7 @@ export default function BoardBuilder() {
   const cols = 8;
 
   const LS_KEY = "dtts_boardbuilder_grid_v1";
+  const LS_BOARDNAME_KEY = "dtts_boardbuilder_name_v1";
 
   const [isGameMode, setIsGameMode] = useState(false);
 
@@ -785,6 +842,7 @@ export default function BoardBuilder() {
       { type: "school-2x1", tileType: "school", name: "École (2x1)", colorClass: "bg-gray-600", size: { w: 2, h: 1 } },
 
       { type: "library-2x1", tileType: "safe_place", name: "Bibliothèque", colorClass: "bg-blue-600", size: { w: 2, h: 1 } },
+      { type: "library_bis-2x1", tileType: "safe_place", name: "Bibliothèque", colorClass: "bg-blue-600", size: { w: 2, h: 1 } },
       { type: "house_2-1x1", tileType: "safe_place", name: "Pavillon", colorClass: "bg-blue-600", size: { w: 1, h: 1 } },
       { type: "house_3-1x1", tileType: "safe_place", name: "Pavillon", colorClass: "bg-blue-600", size: { w: 1, h: 1 } },
       { type: "house_5-1x1", tileType: "safe_place", name: "Pavillon", colorClass: "bg-blue-600", size: { w: 1, h: 1 } },
@@ -794,6 +852,8 @@ export default function BoardBuilder() {
       { type: "parc-1x1", tileType: "safe_place", name: "Parc", colorClass: "bg-blue-600", size: { w: 1, h: 1 } },
       { type: "parc-2x1", tileType: "safe_place", name: "Parc (2x1)", colorClass: "bg-blue-600", size: { w: 2, h: 1 } },
       { type: "gymnasium-3x1", tileType: "safe_place", name: "Gymnase", colorClass: "bg-blue-600", size: { w: 3, h: 1 } },
+      { type: "secret_club-1x2", tileType: "safe_place", name: "Club secret", colorClass: "bg-blue-600", size: { w: 1, h: 2 } },
+      { type: "prom-2x1", tileType: "safe_place", name: "Bal de promo", colorClass: "bg-blue-600", size: { w: 2, h: 1 } },
 
       { type: "swimming_pool-1x2", tileType: "safe_place", name: "Piscine (1x2)", colorClass: "bg-blue-600", size: { w: 1, h: 2 } },
       { type: "swimming_pool-1x3", tileType: "safe_place", name: "Piscine (1x3)", colorClass: "bg-blue-600", size: { w: 1, h: 3 } },
@@ -840,7 +900,24 @@ export default function BoardBuilder() {
   const [cellSize, setCellSize] = useState<number>(64);
 
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
-  const [boardName, setBoardName] = useState("Quartier #" + Math.floor(Math.random() * 10000));
+  const [boardName, setBoardName] = useState(() => {
+    try {
+      const raw = localStorage.getItem(LS_BOARDNAME_KEY);
+      const v = (raw ?? "").trim();
+      if (v.length) return v;
+    } catch {}
+    return "Quartier #" + Math.floor(Math.random() * 10000);
+  });
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      try {
+        localStorage.setItem(LS_BOARDNAME_KEY, boardName);
+      } catch {}
+    }, 150);
+
+    return () => window.clearTimeout(t);
+  }, [boardName]);
 
   useLayoutEffect(() => {
     const el = gridAreaRef.current;
@@ -1231,8 +1308,6 @@ export default function BoardBuilder() {
               backgroundSize: "contain",
               backgroundPosition: "center",
               backgroundRepeat: "no-repeat",
-              transform: rotation ? `rotate(${rotation}deg)` : undefined,
-              transformOrigin: "50% 50%",
             }}
           />
         ) : null}
@@ -1268,7 +1343,7 @@ export default function BoardBuilder() {
           .bb-print-cell { width: 3cm !important; height: 3cm !important; transform: translate(145px, 88px) !important; }
           .bb-print-grid { grid-template-columns: repeat(var(--bb-cols), 3cm) !important; grid-template-rows: repeat(var(--bb-rows), 3cm) !important; gap: 0 !important; }
           .bb-print-input { transform: rotate(90deg) !important; position: absolute !important; left: 48px !important; top: -12px !important; transform-origin: left center !important; }
-          .bb-print-bottom-line { display: block !important; position: absolute !important; top: 270px !important; transform: rotate(90deg) !important; right: -235px !important; font-size: 9pt !important; }  
+          .bb-print-bottom-line { display: block !important; position: absolute !important; top: 270px !important; transform: rotate(90deg) !important; right: -235px !important; font-size: 9pt !important; }
         }
       `}</style>
 

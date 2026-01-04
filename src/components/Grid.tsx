@@ -86,7 +86,7 @@ export default function Grid({
   return (
     <main className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-neutral-800 bg-[#ff2020] p-3">
       <div ref={gridAreaRef} className="flex-1 min-h-0 w-full overflow-hidden">
-        <div className="flex h-full w-full items-center justify-center">
+        <div className="flex h-full w-full items-start justify-center">
           <div
             className="shrink-0"
             style={{
