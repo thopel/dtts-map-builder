@@ -485,15 +485,37 @@ async function generateBoardPdf(args: {
       img.src = src;
     });
 
-  const buildFullTileCanvas = (img: HTMLImageElement, baseW: number, baseH: number, cellPx: number) => {
+  const buildRotatedTileCanvas = (img: HTMLImageElement, baseW: number, baseH: number, cellPx: number, rot: TileRotation) => {
+    const swap = rot === 90 || rot === 270;
+
+    // Taille affichée (après rotation)
+    const dispW = (swap ? baseH : baseW) * cellPx;
+    const dispH = (swap ? baseW : baseH) * cellPx;
+
     const canvas = document.createElement("canvas");
-    canvas.width = baseW * cellPx;
-    canvas.height = baseH * cellPx;
+    canvas.width = dispW;
+    canvas.height = dispH;
+
     const ctx = canvas.getContext("2d");
     if (!ctx) return canvas;
+
     ctx.imageSmoothingEnabled = true;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, dispW, dispH);
+
+    // On dessine l’image au centre et on applique la rotation (comme un transform CSS)
+    const rad = (rot * Math.PI) / 180;
+
+    ctx.translate(dispW / 2, dispH / 2);
+    ctx.rotate(rad);
+
+    const srcW = baseW * cellPx;
+    const srcH = baseH * cellPx;
+
+    ctx.drawImage(img, -srcW / 2, -srcH / 2, srcW, srcH);
+
+    // Reset transform pour éviter les effets de bord
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
     return canvas;
   };
 
@@ -639,14 +661,17 @@ async function generateBoardPdf(args: {
       const dx = c - ac;
       const dy = r - ar;
 
-      const { sx, sy } = mapDisplayToSource(dx, dy, baseW, baseH, rot);
+      // dx/dy = position affichée dans la tuile (après rotation)
+      const sx = dx;
+      const sy = dy;
 
-      const fullKey = `${anchorKey}|${it.type}|${baseW}x${baseH}`;
+      // ✅ inclure la rotation dans la clé de cache, sinon tu réutilises un canvas pas dans le bon sens
+      const fullKey = `${anchorKey}|${it.type}|${baseW}x${baseH}|rot=${rot}`;
       let fullCanvas = fullTileCache.get(fullKey);
 
       if (!fullCanvas) {
         const img = await getImg(it.type);
-        fullCanvas = buildFullTileCanvas(img, baseW, baseH, CELL_PX);
+        fullCanvas = buildRotatedTileCanvas(img, baseW, baseH, CELL_PX, rot);
         fullTileCache.set(fullKey, fullCanvas);
       }
 
