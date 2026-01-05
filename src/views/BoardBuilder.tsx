@@ -8,7 +8,7 @@ import Grid from "../components/Grid";
 import Options from "../components/Options";
 import PrintModal from "../components/PrintModal";
 
-import hoboTtfUrl from "../assets/Hobo.ttf?url";
+import hoboTtfUrl from "../assets/hobo.ttf?url";
 
 import { version } from "../../package.json";
 
