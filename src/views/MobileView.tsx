@@ -1,9 +1,6 @@
-import { useNavigate } from "react-router-dom";
 import { version } from "../../package.json";
 
 export default function MobileView() {
-  const navigate = useNavigate();
-
   return (
     <div className="flex min-h-dvh items-center justify-center bg-neutral-950 px-6 text-neutral-100">
       <div className="w-full max-w-sm rounded-2xl border border-neutral-800 bg-neutral-900/50 p-6 text-center">
