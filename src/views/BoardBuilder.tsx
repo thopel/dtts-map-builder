@@ -754,7 +754,7 @@ async function generateBoardPdf(args: {
       // uniquement school + safe_place (comme ton UI)
       if (it.tileType !== "school" && it.tileType !== "safe_place") continue;
 
-      const rects = getRectsForCell(cellKey, grid, rows, cols);
+      const rects = getRectsForCell(cellKey, grid);
       if (!rects.top && !rects.right && !rects.bottom && !rects.left) continue;
 
       const cellX = startX + c * CELL_CM;
@@ -774,7 +774,7 @@ async function generateBoardPdf(args: {
 
 // -------------------------------------------------------------------------
 
-function getRectsForCell(cellKey: string, grid: Record<string, Cell>, rows: number, cols: number) {
+function getRectsForCell(cellKey: string, grid: Record<string, Cell>) {
   const anchorKey = getAnchorKeyFromCellKey(cellKey, grid);
   if (!anchorKey) return { top: false, right: false, bottom: false, left: false };
 
@@ -1189,7 +1189,7 @@ export default function BoardBuilder() {
     const anchorKey = getAnchorKeyFromCellKey(cellKey, grid);
     const it = anchorKey ? getAnchorItem(anchorKey, grid) : null;
 
-    const selfRects = getRectsForCell(cellKey, grid, rows, cols);
+    const selfRects = getRectsForCell(cellKey, grid);
     const hasAny = selfRects.top || selfRects.right || selfRects.bottom || selfRects.left;
     if (!hasAny) return 1;
 
@@ -1202,10 +1202,10 @@ export default function BoardBuilder() {
     const leftKey = c > 0 ? `${r},${c - 1}` : null;
     const rightKey = c < cols - 1 ? `${r},${c + 1}` : null;
 
-    const topRects = topKey ? getRectsForCell(topKey, grid, rows, cols) : null;
-    const bottomRects = bottomKey ? getRectsForCell(bottomKey, grid, rows, cols) : null;
-    const leftRects = leftKey ? getRectsForCell(leftKey, grid, rows, cols) : null;
-    const rightRects = rightKey ? getRectsForCell(rightKey, grid, rows, cols) : null;
+    const topRects = topKey ? getRectsForCell(topKey, grid) : null;
+    const bottomRects = bottomKey ? getRectsForCell(bottomKey, grid) : null;
+    const leftRects = leftKey ? getRectsForCell(leftKey, grid) : null;
+    const rightRects = rightKey ? getRectsForCell(rightKey, grid) : null;
 
     let hasConflict = false;
 
@@ -1269,7 +1269,7 @@ export default function BoardBuilder() {
   }
 
   function renderRectsForCell(cellKey: string, it: PlacedItem) {
-    const rects = getRectsForCell(cellKey, grid, rows, cols);
+    const rects = getRectsForCell(cellKey, grid);
 
     if (it.tileType === "school") {
       return (

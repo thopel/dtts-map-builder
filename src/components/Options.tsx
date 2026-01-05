@@ -31,7 +31,6 @@ export default function Options({
   setBottomAt,
   setLeftAt,
   setRightAt,
-  clearBoard,
   getTileRotation,
 }: Props) {
   return (
