@@ -2,6 +2,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { jsPDF } from "jspdf";
+import { isMobile } from "../utils/isMobile";
 
 import Palette from "../components/Palette";
 import Grid from "../components/Grid";
@@ -833,6 +834,12 @@ function EdgeRect({ side, color }: { side: "top" | "right" | "bottom" | "left"; 
 export default function BoardBuilder() {
   const navigate = useNavigate();
 
+  useEffect(() => {
+    if (isMobile()) {
+      navigate("/mobile", { replace: true });
+    }
+  }, [navigate]);
+
   const rows = 6;
   const cols = 8;
 
@@ -988,6 +995,7 @@ export default function BoardBuilder() {
   function clearBoard() {
     if (isGameMode) return; // en mode jeu, on bloque
     setGrid(makeEmptyGrid());
+    setBoardName("Quartier #" + Math.floor(Math.random() * 10000));
     setSelectedCell(null);
   }
   // ---------------------------------------------------------------------
@@ -1164,12 +1172,6 @@ export default function BoardBuilder() {
     function onKeyDown(ev: KeyboardEvent) {
       if (isGameMode) return; // ✅ bloque toutes les macros en mode jeu
       if (!selectedCell) return;
-
-      if (ev.key === "Delete" || ev.key === "Backspace") {
-        ev.preventDefault();
-        deleteSelected();
-        return;
-      }
 
       if (ev.key.toLowerCase() === "r") {
         ev.preventDefault();
@@ -1375,7 +1377,7 @@ export default function BoardBuilder() {
       <div className="flex h-full w-full flex-col p-4 bb-no-print">
         <header className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold">Editeur de plateau de jeu pour Don't Talk To Strangers</h1>
+            <h1 className="text-2xl font-semibold">Éditeur de plateau de jeu pour Don't Talk To Strangers</h1>
             <p className="text-sm text-neutral-300">Déplace des tuiles vers la grille pour créer ton plateau de jeu personnalisé.</p>
           </div>
 

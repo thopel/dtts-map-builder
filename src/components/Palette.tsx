@@ -11,7 +11,7 @@ type Props = {
 export default function Palette({ palette, getTileUrl, onRemovePlacedId, parsePayload, onClearTiles }: Props) {
   return (
     <aside
-      className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900/40 h-full"
+      className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900/40 h-full min-w-76"
       onDragOver={(e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
