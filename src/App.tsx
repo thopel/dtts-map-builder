@@ -10,8 +10,6 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<BoardBuilder />} />
-
-        {/* optionnel: fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
         <Route path="/community" element={<Community />} />
         <Route path="/community/:id" element={<CommunityItem />} />
